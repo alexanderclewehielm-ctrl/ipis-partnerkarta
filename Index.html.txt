@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <title>IPIS Partnerkarta – Live (Mapbox)</title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+
+  <style>
+    :root{
+      --bg:#f8fafc; --card:#fff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0;
+      --shadow:0 10px 30px rgba(0,0,0,.12);
+      --radius:16px;
+    }
+    body{margin:0;padding:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);}
+    #map{position:absolute;top:0;bottom:0;width:100%;}
+
+    .sidebar{
+      position:absolute; top:16px; left:16px; z-index:10;
+      width:360px; max-height: calc(100vh - 32px);
+      overflow:hidden;
+      background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+      display:flex; flex-direction:column;
+    }
+    .side-top{padding:14px 14px 10px;border-bottom:1px solid #f1f5f9;}
+    .title{font-weight:900;font-size:16px;color:var(--text);margin:0 0 6px;}
+    .sub{font-size:12px;color:var(--muted);margin:0;line-height:1.35;}
+    .row{display:flex;gap:8px;margin-top:10px;}
+    .row input{
+      flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:12px;
+      font-size:13px; outline:none;
+    }
+    .row button{
+      padding:10px 12px; border-radius:12px; border:0; cursor:pointer;
+      background:#0f172a; color:#fff; font-weight:900; font-size:12px;
+    }
+
+    .filters{padding:10px 14px; border-bottom:1px solid #f1f5f9; display:grid; gap:10px;}
+    .section h3{margin:0 0 8px; font-size:11px; color:#334155; letter-spacing:.06em; text-transform:uppercase;}
+    .chiprow{display:flex;flex-wrap:wrap;gap:8px;}
+    .chip{
+      display:flex; align-items:center; gap:8px;
+      padding:7px 10px; border:1px solid var(--line); border-radius:999px;
+      font-size:12px; cursor:pointer; user-select:none; background:#fff;
+    }
+    .chip input{margin:0; transform:scale(1.05);}
+    .dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+
+    .stats{padding:10px 14px; border-bottom:1px solid #f1f5f9; font-size:12px; color:var(--muted);}
+    .list{padding:10px 10px 12px; overflow:auto;}
+    .item{
+      border:1px solid #eef2f7; border-radius:14px; background:#fff;
+      padding:10px 10px; margin:0 4px 10px;
+      cursor:pointer;
+    }
+    .item:hover{background:#f8fafc;}
+    .itemTop{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+    .name{font-weight:900;color:var(--text);font-size:13px;line-height:1.2;}
+    .tag{font-size:11px;font-weight:900;border-radius:999px;padding:4px 8px;border:1px solid var(--line);color:#334155;}
+    .meta{font-size:12px;color:#475569;margin-top:6px;line-height:1.35;}
+    .small{font-size:11px;color:var(--muted);margin-top:4px;}
+
+    /* Popup */
+    .mapboxgl-popup-content{padding:0;border-radius:16px;overflow:hidden;width:320px;border:none;}
+    .p-header{color:#fff;padding:14px;font-weight:900;font-size:13px;display:flex;justify-content:space-between;align-items:center;}
+    .p-body{padding:14px;background:#fff;}
+    .p-title{font-size:16px;font-weight:900;margin-bottom:6px;color:#0f172a;}
+    .p-meta{font-size:12px;color:#475569;line-height:1.45;}
+    .badge{display:inline-block;padding:4px 8px;border-radius:10px;font-size:11px;font-weight:900;margin:8px 0;}
+    .badge-jour{background:#fee2e2;color:#b91c1c;}
+    .badge-plan{background:#dbeafe;color:#1d4ed8;}
+    .badge-bada{background:#dcfce7;color:#166534;}
+    .badge-unk{background:#f1f5f9;color:#334155;}
+    .box{background:#f1f5f9;border:1px solid var(--line);padding:10px;border-radius:12px;margin-top:10px;font-size:12px;color:#334155;}
+    .cta{display:flex;gap:10px;margin-top:12px;}
+    .btn{
+      flex:1;text-align:center;text-decoration:none;
+      padding:12px;border-radius:12px;font-weight:900;font-size:13px;
+      display:inline-flex;justify-content:center;align-items:center;gap:8px;
+      border:1px solid var(--line);
+    }
+    .btnCall{background:#10b981;color:#fff;border:0;}
+    .btnCall:hover{background:#059669;}
+    .btnMail{background:#fff;color:#0f172a;}
+    .btnMail:hover{background:#f8fafc;}
+  </style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="side-top">
+    <div class="title">IPIS Partnerkarta (Live)</div>
+    <p class="sub">
+      Hämtar live från Google Sheet CSV. Fyll gärna <b>Lat</b> & <b>Lon</b> för exakt position.
+      Annars används stad som fallback.
+    </p>
+    <div class="row">
+      <input id="searchInput" placeholder="Sök företag, stad, specialisering..." />
+      <button id="clearBtn">Rensa</button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <div class="section">
+      <h3>Vertikaler</h3>
+      <div class="chiprow" id="verticalChips"></div>
+    </div>
+    <div class="section">
+      <h3>Uppdragstyp</h3>
+      <div class="chiprow" id="jobtypeChips"></div>
+    </div>
+  </div>
+
+  <div class="stats" id="statusText">Laddar data…</div>
+  <div class="list" id="resultsList"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+  // =============================
+  // KONFIG — (DIN TOKEN + DIN CSV)
+  // =============================
+  mapboxgl.accessToken = 'pk.eyJ1IjoiY2xld2VuIiwiYSI6ImNta2F4ZTFtcDEwcGgzZnIzdmtpdTZvZWUifQ.eYahwgBgeN4OXkqC-3YR_A';
+
+  const SHEET_CSV_URL =
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vSXgiZAmCFpi1mx1WN5gK0VYdONYZP3kQB3ShA6NGOthfhE8SlNw_NsDeCALpi9PA/pub?gid=2104705724&single=true&output=csv';
+
+  const COLORS = {
+    'Elektriker': '#f59e0b',
+    'VVS': '#3b82f6',
+    'Spol': '#10b981',
+    'Snickareonline': '#d97706',
+    'Handyman': '#ef4444',
+    'Trädgård': '#22c55e',
+    'Flytt': '#8b5cf6',
+    'Okänd': '#64748b'
+  };
+
+  const JOB_TYPES = ['Jour', 'Planerat', 'Båda', 'Okänt'];
+
+  // =============================
+  // HJÄLP
+  // =============================
+  const CITY_COORDS = {
+    'stockholm':[18.06,59.33],'göteborg':[11.97,57.70],'malmö':[13.00,55.60],'uppsala':[17.63,59.85],
+    'linköping':[15.62,58.41],'norrköping':[16.19,58.59],'örebro':[15.21,59.27],'västerås':[16.55,59.61],
+    'helsingborg':[12.70,56.05],'lund':[13.19,55.70],'umeå':[20.26,63.83],'gävle':[17.14,60.67],
+    'kalmar':[16.36,56.66],'karlstad':[13.51,59.38],'borlänge':[15.43,60.48],'luleå':[22.15,65.58],
+    'sundsvall':[17.31,62.39],'växjö':[14.81,56.88],'jönköping':[14.16,57.78],'skellefteå':[20.95,64.75]
+  };
+
+  function safeStr(v){ return (v===undefined||v===null) ? '' : String(v).trim(); }
+  function toFloat(v){
+    const s = safeStr(v).replace(',', '.').replace(/\s+/g,'');
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  function coordsFromCity(city){
+    const key = safeStr(city).toLowerCase();
+    return CITY_COORDS[key] || [18.06, 59.33];
+  }
+  function normalizeJobType(v){
+    const x = safeStr(v).toLowerCase();
+    if(!x || x==='1' || x==='okänt' || x==='okant') return 'Okänt';
+    const hasJour = x.includes('jour') || x.includes('akut');
+    const hasPlan = x.includes('plan');
+    if(hasJour && hasPlan) return 'Båda';
+    if(hasJour) return 'Jour';
+    if(hasPlan) return 'Planerat';
+    if(x.includes('båda') || x.includes('bada')) return 'Båda';
+    return 'Okänt';
+  }
+  function badge(job){
+    if(job==='Jour') return `<div class="badge badge-jour">🚨 Jour</div>`;
+    if(job==='Planerat') return `<div class="badge badge-plan">📅 Planerat</div>`;
+    if(job==='Båda') return `<div class="badge badge-bada">✅ Jour + Planerat</div>`;
+    return `<div class="badge badge-unk">❓ Okänt</div>`;
+  }
+
+  // Robust header mapping: klarar olika rubriknamn i Sheet
+  const HEADER_ALIASES = {
+    Vertikal: ['Vertikal','Kategori','Category','cat'],
+    Företagsnamn: ['Företagsnamn','Företag','Bolag','Namn','Company','name','namn'],
+    Telefon: ['Telefon','Tel','Phone','telefonnummer'],
+    'E-post': ['E-post','Epost','Mail','Email','E-mail'],
+    Adress: ['Adress','Address','Gatuadress','Street'],
+    Stad: ['Stad','Ort','City','Kommun'],
+    Lat: ['Lat','Latitude','Breddgrad'],
+    Lon: ['Lon','Lng','Long','Longitude','Längdgrad'],
+    'Antal hantverkare': ['Antal hantverkare','Antal','Personal','Hantverkare','Crew','Employees'],
+    Uppdragstyp: ['Uppdragstyp','Uppdrag','Typ','Jour/Planerat','Availability'],
+    Betyg: ['Betyg','Rating','Recensioner','Score'],
+    Info: ['Info','Kommentar','Notering','Notes','Description'],
+    Specialisering: ['Specialisering','Specialitet','Tjänster','Services','Skills']
+  };
+
+  function normalizeHeader(h){
+    return safeStr(h).toLowerCase().replace(/\s+/g,' ').replace(/[._-]/g,'').trim();
+  }
+
+  function indexColumns(headerRow){
+    const headerNorm = headerRow.map(normalizeHeader);
+    const out = {};
+    for(const key of Object.keys(HEADER_ALIASES)){
+      const aliases = HEADER_ALIASES[key].map(normalizeHeader);
+      let found = -1;
+      for(const a of aliases){
+        const idx = headerNorm.indexOf(a);
+        if(idx !== -1){ found = idx; break; }
+      }
+      out[key] = found;
+    }
+    return out;
+  }
+
+  // Simple CSV parser (quotes-safe)
+  function parseCSV(text){
+    const rows = [];
+    let cur='', row=[], inQuotes=false;
+    for(let i=0;i<text.length;i++){
+      const ch=text[i], next=text[i+1];
+      if(ch === '"' && inQuotes && next === '"'){ cur += '"'; i++; }
+      else if(ch === '"'){ inQuotes=!inQuotes; }
+      else if(ch === ',' && !inQuotes){ row.push(cur); cur=''; }
+      else if((ch === '\n' || ch === '\r') && !inQuotes){
+        if(cur.length || row.length){ row.push(cur); rows.push(row); }
+        cur=''; row=[];
+        if(ch === '\r' && next === '\n') i++;
+      } else cur += ch;
+    }
+    if(cur.length || row.length){ row.push(cur); rows.push(row); }
+    return rows;
+  }
+
+  function getCell(row, idx){ return (idx===-1) ? '' : safeStr(row[idx]); }
+
+  // =============================
+  // MAP INIT
+  // =============================
+  const map = new mapboxgl.Map({
+    container:'map',
+    style:'mapbox://styles/mapbox/light-v11',
+    center:[16.5, 59.3],
+    zoom:4.6
+  });
+
+  let allFeatures = [];
+  let filteredFeatures = [];
+  let selectedVerticals = new Set();
+  let selectedJobTypes  = new Set(JOB_TYPES);
+  let searchQuery = '';
+
+  function setStatus(msg){ document.getElementById('statusText').textContent = msg; }
+
+  function renderJobTypeChips(){
+    const root = document.getElementById('jobtypeChips');
+    root.innerHTML = '';
+    JOB_TYPES.forEach(t=>{
+      const el=document.createElement('label');
+      el.className='chip';
+      el.innerHTML=`<input type="checkbox" ${selectedJobTypes.has(t)?'checked':''} data-t="${t}"> ${t}`;
+      el.querySelector('input').addEventListener('change',(e)=>{
+        const k=e.target.getAttribute('data-t');
+        if(e.target.checked) selectedJobTypes.add(k); else selectedJobTypes.delete(k);
+        applyFilters();
+      });
+      root.appendChild(el);
+    });
+  }
+
+  function renderVerticalChips(verts){
+    const root = document.getElementById('verticalChips');
+    root.innerHTML='';
+    verts.forEach(v=>{
+      const color = COLORS[v] || COLORS.Okänd;
+      const el=document.createElement('label');
+      el.className='chip';
+      el.innerHTML=`<input type="checkbox" ${selectedVerticals.has(v)?'checked':''} data-v="${v}">
+                    <span class="dot" style="background:${color}"></span> ${v}`;
+      el.querySelector('input').addEventListener('change',(e)=>{
+        const k=e.target.getAttribute('data-v');
+        if(e.target.checked) selectedVerticals.add(k); else selectedVerticals.delete(k);
+        applyFilters();
+      });
+      root.appendChild(el);
+    });
+  }
+
+  function renderList(items){
+    const root=document.getElementById('resultsList');
+    root.innerHTML='';
+    const MAX=80; // håll den snabb
+    items.slice(0,MAX).forEach(f=>{
+      const p=f.properties;
+      const v=p.Vertikal || 'Okänd';
+      const jt=p.Uppdragstyp || 'Okänt';
+      const rating=p.Betyg || '1';
+      const city=p.Stad || '-';
+      const spec=p.Specialisering || '';
+      const info=p.Info || '';
+      const el=document.createElement('div');
+      el.className='item';
+      el.innerHTML=`
+        <div class="itemTop">
+          <div class="name">${p.Företagsnamn || '-'}</div>
+          <div class="tag">⭐ ${rating}</div>
+        </div>
+        <div class="meta">
+          <b>${v}</b> • ${jt}<br/>
+          📍 ${city}${p.Adress ? ' • ' + p.Adress : ''}
+        </div>
+        <div class="small">${spec || info || ''}</div>
+      `;
+      el.addEventListener('click',()=>{
+        map.easeTo({ center: f.geometry.coordinates, zoom: 10, duration: 650 });
+        openPopupForFeature(f);
+      });
+      root.appendChild(el);
+    });
+
+    if(items.length > MAX){
+      const more=document.createElement('div');
+      more.className='small';
+      more.style.padding='0 8px 10px';
+      more.textContent=`Visar ${MAX} av ${items.length} träffar. Förfina sök/filter för att se fler.`;
+      root.appendChild(more);
+    }
+  }
+
+  function openPopupForFeature(f){
+    const p=f.properties;
+    const vert=p.Vertikal || 'Okänd';
+    const color = COLORS[vert] || COLORS.Okänd;
+    const html = `
+      <div class="p-header" style="background:${color}">
+        <div>${vert}</div>
+        <div style="font-weight:900;">⭐ ${p.Betyg || '-'}</div>
+      </div>
+      <div class="p-body">
+        <div class="p-title">${p.Företagsnamn || ''}</div>
+        ${badge(p.Uppdragstyp || 'Okänt')}
+        <div class="p-meta">
+          📍 <b>${p.Stad || '-'}</b> ${p.Adress ? ` • ${p.Adress}` : ''}<br/>
+          👷 <b>${p['Antal hantverkare'] || '1'}</b> hantverkare
+        </div>
+        ${(p.Info || p.Specialisering) ? `
+          <div class="box">
+            ${p.Info ? `<div><b>Info:</b> ${p.Info}</div>` : ``}
+            ${p.Specialisering ? `<div style="margin-top:6px;"><b>Specialisering:</b> ${p.Specialisering}</div>` : ``}
+          </div>` : ``}
+        <div class="cta">
+          ${p.Telefon ? `<a class="btn btnCall" href="tel:${p.Telefon}">📞 Ring</a>` : `<span class="btn" style="opacity:.5;">📞 Saknas</span>`}
+          ${p['E-post'] ? `<a class="btn btnMail" href="mailto:${p['E-post']}">✉️ Mail</a>` : `<span class="btn" style="opacity:.5;">✉️ Saknas</span>`}
+        </div>
+      </div>
+    `;
+    new mapboxgl.Popup().setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+  }
+
+  function setGeojson(features){
+    const fc={ type:'FeatureCollection', features };
+    const src=map.getSource('partners');
+    if(src) src.setData(fc);
+    else{
+      map.addSource('partners',{
+        type:'geojson', data:fc,
+        cluster:true, clusterMaxZoom:14, clusterRadius:55
+      });
+
+      map.addLayer({
+        id:'clusters', type:'circle', source:'partners',
+        filter:['has','point_count'],
+        paint:{
+          'circle-color':'#0f172a',
+          'circle-radius':18,
+          'circle-stroke-width':2,
+          'circle-stroke-color':'#fff'
+        }
+      });
+      map.addLayer({
+        id:'cluster-count', type:'symbol', source:'partners',
+        filter:['has','point_count'],
+        layout:{ 'text-field':'{point_count_abbreviated}', 'text-size':12 },
+        paint:{ 'text-color':'#fff' }
+      });
+      map.addLayer({
+        id:'points', type:'circle', source:'partners',
+        filter:['!', ['has','point_count']],
+        paint:{
+          'circle-color': ['match', ['get','Vertikal'],
+            ...Object.keys(COLORS).flatMap(k => [k, COLORS[k]]),
+            COLORS.Okänd
+          ],
+          'circle-radius':9,
+          'circle-stroke-width':3,
+          'circle-stroke-color':'#fff'
+        }
+      });
+
+      // Kluster-klick → zooma in
+      map.on('click','clusters',(e)=>{
+        const features = map.queryRenderedFeatures(e.point, { layers:['clusters'] });
+        const clusterId = features[0].properties.cluster_id;
+        map.getSource('partners').getClusterExpansionZoom(clusterId,(err,zoom)=>{
+          if(err) return;
+          map.easeTo({ center: features[0].geometry.coordinates, zoom });
+        });
+      });
+
+      // Punkt-klick → popup
+      map.on('click','points',(e)=>{
+        const f=e.features[0];
+        openPopupForFeature(f);
+      });
+
+      map.on('mouseenter','points',()=> map.getCanvas().style.cursor='pointer');
+      map.on('mouseleave','points',()=> map.getCanvas().style.cursor='');
+      map.on('mouseenter','clusters',()=> map.getCanvas().style.cursor='pointer');
+      map.on('mouseleave','clusters',()=> map.getCanvas().style.cursor='');
+    }
+  }
+
+  function featureMatches(f){
+    const p=f.properties;
+    const v=p.Vertikal || 'Okänd';
+    const jt=p.Uppdragstyp || 'Okänt';
+
+    if(selectedVerticals.size && !selectedVerticals.has(v)) return false;
+    if(selectedJobTypes.size && !selectedJobTypes.has(jt)) return false;
+
+    if(searchQuery){
+      const hay = [
+        p.Företagsnamn, p.Stad, p.Adress, p.Specialisering, p.Info, p.Telefon, p['E-post']
+      ].map(safeStr).join(' ').toLowerCase();
+      if(!hay.includes(searchQuery)) return false;
+    }
+    return true;
+  }
+
+  function applyFilters(){
+    filteredFeatures = allFeatures.filter(featureMatches);
+    setGeojson(filteredFeatures);
+    renderList(filteredFeatures);
+    setStatus(`Visar ${filteredFeatures.length} företag (av ${allFeatures.length})`);
+  }
+
+  // =============================
+  // LOAD CSV → FEATURES
+  // =============================
+  async function loadCSV(){
+    setStatus('Hämtar live-data från Google Sheet…');
+    const res = await fetch(SHEET_CSV_URL, { cache:'no-store' });
+    if(!res.ok) throw new Error('Kunde inte hämta CSV. Är sheet publicerad som CSV?');
+    const text = await res.text();
+    const rows = parseCSV(text);
+    if(!rows.length) return [];
+
+    const col = indexColumns(rows[0]);
+
+    const feats=[];
+    for(let i=1;i<rows.length;i++){
+      const row=rows[i];
+
+      const name = getCell(row, col.Företagsnamn);
+      if(!name) continue;
+
+      const vert = getCell(row, col.Vertikal) || 'Okänd';
+      const city = getCell(row, col.Stad);
+      const adr  = getCell(row, col.Adress);
+
+      const lat = toFloat(getCell(row, col.Lat));
+      const lon = toFloat(getCell(row, col.Lon));
+      const coords = (lat!==null && lon!==null) ? [lon,lat] : coordsFromCity(city);
+
+      const props = {
+        Vertikal: vert,
+        Företagsnamn: name,
+        Telefon: getCell(row, col.Telefon),
+        'E-post': getCell(row, col['E-post']),
+        Adress: adr,
+        Stad: city,
+        'Antal hantverkare': getCell(row, col['Antal hantverkare']) || '1',
+        Uppdragstyp: normalizeJobType(getCell(row, col.Uppdragstyp)),
+        Betyg: getCell(row, col.Betyg) || '1',
+        Info: getCell(row, col.Info) || '',
+        Specialisering: getCell(row, col.Specialisering) || ''
+      };
+
+      feats.push({ type:'Feature', properties: props, geometry:{ type:'Point', coordinates: coords } });
+    }
+    return feats;
+  }
+
+  // =============================
+  // UI EVENTS
+  // =============================
+  document.getElementById('searchInput').addEventListener('input',(e)=>{
+    searchQuery = safeStr(e.target.value).toLowerCase();
+    applyFilters();
+  });
+  document.getElementById('clearBtn').addEventListener('click',()=>{
+    document.getElementById('searchInput').value='';
+    searchQuery='';
+    applyFilters();
+  });
+
+  // =============================
+  // START
+  // =============================
+  map.on('load', async ()=>{
+    try{
+      renderJobTypeChips();
+
+      const feats = await loadCSV();
+      allFeatures = feats;
+
+      // Vertikaler från datan (plus "Okänd" om det finns)
+      const verts = Array.from(new Set(feats.map(f => safeStr(f.properties.Vertikal || 'Okänd'))))
+        .filter(v => v)
+        .sort((a,b)=>a.localeCompare(b,'sv'));
+
+      // Default: välj alla (utom Okänd kan du välja själv)
+      selectedVerticals = new Set(verts);
+
+      renderVerticalChips(verts);
+
+      setGeojson(allFeatures);
+      applyFilters();
+
+      // Zooma ut så hela Sverige känns rätt om du vill:
+      // map.fitBounds([[10.5, 55.0],[24.5, 69.5]], { padding: 40, duration: 600 });
+
+    }catch(err){
+      console.error(err);
+      setStatus('❌ Fel: ' + (err.message || err));
+    }
+  });
+</script>
+</body>
+</html>
