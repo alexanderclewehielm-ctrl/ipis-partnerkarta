@@ -54,7 +54,6 @@
       border: 1px solid #e3e3e3; background:#fbfbfb; font-size: 12px; margin-left: 6px;
     }
 
-    /* Mobile */
     @media (max-width: 900px) {
       #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
       #panel { border-right: none; border-bottom: 1px solid #e7e7e7; }
@@ -68,7 +67,7 @@
   <div id="panel">
     <h1>IPIS partnerkarta (2026)</h1>
     <div class="muted">
-      Data läses live från Google Sheets (CSV). Filtrera på vertikal och typ, sök på företag/stad.
+      Data läses från CSV i GitHub-repot. Filtrera på vertikal och typ, sök på företag/stad.
     </div>
 
     <div class="row">
@@ -111,7 +110,7 @@
     </div>
 
     <div class="row muted">
-      Tips: Om CSV uppdateras men du inte ser ändring direkt — klicka “Uppdatera data”.
+      Tips: Om du precis committat en ny CSV — klicka “Uppdatera data” och gör en hard refresh.
     </div>
   </div>
 
@@ -122,7 +121,9 @@
   // ====== 1) KONFIG ======
   mapboxgl.accessToken = "pk.eyJ1IjoiY2xld2VuIiwiYSI6ImNta2F4ZTFtcDEwcGgzZnIzdmtpdTZvZWUifQ.eYahwgBgeN4OXkqC-3YR_A";
 
+  // CSV i samma repo (root). Byt filnamn här om du döper om CSV:n.
   const CSV_URL = "./IPIS_KARTA_2026_CLEAN_NO_DUPLICATES.csv";
+
   const SOURCE_ID = "partners";
   const LAYER_UNCLUSTERED = "unclustered-points";
   const LAYER_CLUSTERS = "clusters";
@@ -142,23 +143,20 @@
   const map = new mapboxgl.Map({
     container: "map",
     style: "mapbox://styles/mapbox/streets-v12",
-    center: [15.0, 62.0],  // Sverige-ish
+    center: [15.0, 62.0],
     zoom: 4.2
   });
 
   map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
   // ====== 4) DATA ======
-  let allRows = [];       // rådata från CSV (som objekt)
-  let filteredRows = [];  // efter filter+sök
+  let allRows = [];
+  let filteredRows = [];
 
   function parseCSV(text) {
-    // Enkel CSV-parser som klarar vanliga Google Sheets CSV (komma-separerad)
-    // Om du har kommatecken i "info", använd citattecken i sheeten.
     const lines = text.replace(/\r/g, "").split("\n").filter(Boolean);
     const headers = splitCSVLine(lines[0]).map(h => h.trim());
     const rows = [];
-
     for (let i = 1; i < lines.length; i++) {
       const cols = splitCSVLine(lines[i]);
       const obj = {};
@@ -168,7 +166,6 @@
     return rows;
   }
 
-  // Splittar en CSV-rad, respekterar "citat, med, komma"
   function splitCSVLine(line) {
     const out = [];
     let cur = "";
@@ -176,8 +173,7 @@
 
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
-      if (ch === '"' ) {
-        // dubbla "" -> "
+      if (ch === '"') {
         if (inQuotes && line[i+1] === '"') { cur += '"'; i++; }
         else { inQuotes = !inQuotes; }
       } else if (ch === "," && !inQuotes) {
@@ -188,6 +184,13 @@
     }
     out.push(cur);
     return out;
+  }
+
+  // Normalisera vertikal så dropdownen "Spolbil" kan matcha data som heter "Spol"
+  function normalizeVertical(v) {
+    const s = String(v || "").trim();
+    if (s === "Spol") return "Spolbil";
+    return s;
   }
 
   function rowsToGeoJSON(rows) {
@@ -202,7 +205,7 @@
         geometry: { type: "Point", coordinates: [lng, lat] },
         properties: {
           name: r.name || "",
-          vertical: r.vertical || "",
+          vertical: normalizeVertical(r.vertical || ""),
           city: r.city || "",
           rating: r.rating || "",
           info: r.info || "",
@@ -216,9 +219,11 @@
 
   async function loadCSV() {
     setStatus("Laddar…");
-    // Cache-busting så “live-uppdatering” känns direkt
-    const url = CSV_URL + "&t=" + Date.now();
-    const res = await fetch(url);
+
+    // Cache-bust som funkar för både lokala filer och URL:er med querystring
+    const url = CSV_URL + (CSV_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
+
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error("Kunde inte hämta CSV (" + res.status + ")");
     const text = await res.text();
     allRows = parseCSV(text);
@@ -233,7 +238,7 @@
     filteredRows = allRows.filter(r => {
       const name = (r.name || "").toLowerCase();
       const city = (r.city || "").toLowerCase();
-      const vertical = (r.vertical || "");
+      const vertical = normalizeVertical(r.vertical || "");
       const service = (r.service || "");
 
       if (v !== "ALL" && vertical !== v) return false;
@@ -282,7 +287,6 @@
         clusterRadius: 50
       });
 
-      // Kluster-cirklar
       map.addLayer({
         id: LAYER_CLUSTERS,
         type: "circle",
@@ -297,7 +301,6 @@
         }
       });
 
-      // Siffra i kluster
       map.addLayer({
         id: LAYER_CLUSTER_COUNT,
         type: "symbol",
@@ -309,7 +312,6 @@
         }
       });
 
-      // Enskilda punkter
       map.addLayer({
         id: LAYER_UNCLUSTERED,
         type: "circle",
@@ -322,7 +324,6 @@
         }
       });
 
-      // Klick på kluster -> zooma in (standardmönster från Mapbox klusterexempel) :contentReference[oaicite:2]{index=2}
       map.on("click", LAYER_CLUSTERS, (e) => {
         const features = map.queryRenderedFeatures(e.point, { layers: [LAYER_CLUSTERS] });
         const clusterId = features[0].properties.cluster_id;
@@ -332,7 +333,6 @@
         });
       });
 
-      // Klick på punkt -> popup
       map.on("click", LAYER_UNCLUSTERED, (e) => {
         const f = e.features[0];
         const p = f.properties;
@@ -362,10 +362,8 @@
       map.on("mouseenter", LAYER_CLUSTERS, () => map.getCanvas().style.cursor = "pointer");
       map.on("mouseleave", LAYER_CLUSTERS, () => map.getCanvas().style.cursor = "");
 
-      // Första filtrering (räknare etc)
       applyFilters();
       setStatus("Live");
-
     } catch (err) {
       console.error(err);
       setStatus("Fel");
