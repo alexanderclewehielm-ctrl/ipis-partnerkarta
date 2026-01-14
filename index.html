@@ -5,22 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>IPIS Partnerkarta (2026)</title>
 
-  <!-- Mapbox GL JS (CDNJS) -->
+  <!-- Mapbox GL JS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mapbox-gl/3.15.0/mapbox-gl.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mapbox-gl/3.15.0/mapbox-gl.min.js"></script>
 
   <style>
-    :root { --panel-w: 340px; }
+    :root { --panel-w: 360px; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
     #app { display: grid; grid-template-columns: var(--panel-w) 1fr; height: 100vh; }
-
-    #panel {
-      border-right: 1px solid #e7e7e7;
-      padding: 14px;
-      overflow: auto;
-      background: #fff;
-    }
+    #panel { border-right: 1px solid #e7e7e7; padding: 14px; overflow: auto; background: #fff; }
     #map { width: 100%; height: 100%; }
 
     h1 { font-size: 16px; margin: 0 0 10px; }
@@ -54,6 +48,47 @@
       border: 1px solid #e3e3e3; background:#fbfbfb; font-size: 12px; margin-left: 6px;
     }
 
+    .tabs { display:flex; gap:8px; margin-top: 10px; }
+    .tab {
+      padding: 6px 10px; border:1px solid #e3e3e3; border-radius: 999px;
+      font-size: 12px; cursor:pointer; background:#fbfbfb;
+      user-select:none;
+    }
+    .tab.active { background:#111; color:#fff; border-color:#111; }
+
+    .list {
+      margin-top: 10px;
+      border-top: 1px dashed #eee;
+      padding-top: 10px;
+    }
+    .card {
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      padding: 10px;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      cursor:pointer;
+      background:#fff;
+    }
+    .card:hover { background:#fafafa; }
+    .card-title { font-weight: 800; font-size: 13px; }
+    .card-meta { font-size: 12px; color:#555; margin-top: 2px; }
+    .star {
+      margin-left:auto;
+      border:1px solid #eee;
+      border-radius: 10px;
+      padding: 4px 8px;
+      font-size: 12px;
+      background:#fbfbfb;
+      cursor:pointer;
+      user-select:none;
+    }
+    .star.on { background:#111; color:#fff; border-color:#111; }
+
+    .smallbtn { padding: 8px 10px; font-size: 12px; border-radius: 10px; }
+
     @media (max-width: 900px) {
       #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
       #panel { border-right: none; border-bottom: 1px solid #e7e7e7; }
@@ -67,7 +102,7 @@
   <div id="panel">
     <h1>IPIS partnerkarta (2026)</h1>
     <div class="muted">
-      Data läses från CSV i GitHub-repot. Filtrera på vertikal och typ, sök på företag/stad.
+      Data läses från CSV i GitHub-repot. Filtrera på tjänst, sök på företag/stad. Favoriter sparas lokalt.
     </div>
 
     <div class="row">
@@ -77,94 +112,141 @@
 
     <div class="row grid2">
       <div>
-        <label for="vertical">Vertikal</label>
-        <select id="vertical">
+        <label for="group">Tjänst</label>
+        <select id="group">
           <option value="ALL">Alla</option>
-          <option>Elektriker</option>
-          <option>VVS</option>
-          <option>Spolbil</option>
-          <option>Flytt</option>
-          <option>Handyman</option>
-          <option>Snickareonline</option>
+          <option value="CORE">Core</option>
+          <option value="AVTAL">Avtal</option>
         </select>
       </div>
       <div>
-        <label for="service">Jour / Planerat</label>
+        <label for="service">Val</label>
         <select id="service">
           <option value="ALL">Alla</option>
-          <option>Jour</option>
-          <option>Planerat</option>
-          <option>Båda</option>
         </select>
       </div>
     </div>
 
     <div class="row btns">
+      <button id="zoomTo" type="button">Zooma till resultat</button>
       <button id="reload" type="button">Uppdatera data</button>
-      <button id="reset" type="button">Nollställ filter</button>
+    </div>
+
+    <div class="row btns">
+      <button id="reset" type="button">Nollställ</button>
+      <button id="centerSE" type="button">Sverige</button>
     </div>
 
     <div class="stat">
       Visar <strong id="count">0</strong> företag
       <span class="pill" id="status">Laddar…</span>
+      <span class="pill" id="coordsInfo">0 med koordinater</span>
     </div>
 
-    <div class="row muted">
-      Tips: Om du precis committat en ny CSV — klicka “Uppdatera data” och gör en hard refresh.
+    <div class="tabs">
+      <div class="tab active" id="tabResults">Resultat</div>
+      <div class="tab" id="tabFav">Favoriter</div>
+      <div class="tab" id="tabNear">Närmast</div>
     </div>
+
+    <div id="nearPanel" style="display:none;">
+      <div class="row">
+        <label for="nearAddr">Närmast adress</label>
+        <input id="nearAddr" type="text" placeholder="Klistra in adress, t.ex. 'Storgatan 1, Uppsala'">
+      </div>
+      <div class="row btns">
+        <button class="smallbtn" id="nearMe" type="button">Närmast mig</button>
+        <button class="smallbtn" id="nearSearch" type="button">Sök adress</button>
+      </div>
+      <div class="muted">Visar närmaste 20 partners (kräver lat/lng i datan).</div>
+    </div>
+
+    <div class="list" id="list"></div>
   </div>
 
   <div id="map"></div>
 </div>
 
 <script>
-  // ====== 1) KONFIG ======
-  mapboxgl.accessToken = "pk.eyJ1IjoiY2xld2VuIiwiYSI6ImNta2F4ZTFtcDEwcGgzZnIzdmtpdTZvZWUifQ.eYahwgBgeN4OXkqC-3YR_A";
+  // ===================== KONFIG =====================
+  mapboxgl.accessToken = "DIN_MAPBOX_TOKEN_HÄR";
 
-  // CSV i samma repo (root). Byt filnamn här om du döper om CSV:n.
+  // CSV i samma repo (root)
   const CSV_URL = "./IPIS_KARTA_2026_CLEAN_NO_DUPLICATES.csv";
 
-  const SOURCE_ID = "partners";
-  const LAYER_UNCLUSTERED = "unclustered-points";
-  const LAYER_CLUSTERS = "clusters";
-  const LAYER_CLUSTER_COUNT = "cluster-count";
+  // Tjänster (matchar exakt dina vertical-värden)
+  const CORE_SERVICES  = ["Elektriker", "VVS", "Spol", "Handyman", "Snickareonline", "Flytt"];
+  const AVTAL_SERVICES = ["Laddbox", "Batteri", "Bauhaus", "Värmepump/kyla"];
 
-  // ====== 2) UI ======
-  const $ = (id) => document.getElementById(id);
-  const elSearch = $("search");
-  const elVertical = $("vertical");
-  const elService = $("service");
-  const elCount = $("count");
-  const elStatus = $("status");
-
-  function setStatus(text) { elStatus.textContent = text; }
-
-  // ====== 3) MAP ======
+  // ===================== MAP =====================
   const map = new mapboxgl.Map({
     container: "map",
     style: "mapbox://styles/mapbox/streets-v12",
     center: [15.0, 62.0],
     zoom: 4.2
   });
-
   map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
-  // ====== 4) DATA ======
+  // ===================== UI =====================
+  const $ = (id) => document.getElementById(id);
+
+  const elSearch = $("search");
+  const elGroup  = $("group");
+  const elSvc    = $("service");
+  const elCount  = $("count");
+  const elStatus = $("status");
+  const elCoordsInfo = $("coordsInfo");
+  const elList   = $("list");
+
+  const tabResults = $("tabResults");
+  const tabFav = $("tabFav");
+  const tabNear = $("tabNear");
+  const nearPanel = $("nearPanel");
+  const nearAddr = $("nearAddr");
+
+  function setStatus(t){ elStatus.textContent = t; }
+
+  function setActiveTab(which){
+    tabResults.classList.toggle("active", which === "results");
+    tabFav.classList.toggle("active", which === "fav");
+    tabNear.classList.toggle("active", which === "near");
+    nearPanel.style.display = (which === "near") ? "" : "none";
+    renderList(); // re-render list for current tab
+  }
+
+  tabResults.onclick = () => setActiveTab("results");
+  tabFav.onclick = () => setActiveTab("fav");
+  tabNear.onclick = () => setActiveTab("near");
+
+  function normalizeService(v) {
+    return String(v || "").trim();
+  }
+  function groupAllows(groupValue, svc){
+    if (groupValue === "CORE") return CORE_SERVICES.includes(svc);
+    if (groupValue === "AVTAL") return AVTAL_SERVICES.includes(svc);
+    return true;
+  }
+
+  function setServiceOptions(groupValue){
+    let list;
+    if (groupValue === "CORE") list = CORE_SERVICES;
+    else if (groupValue === "AVTAL") list = AVTAL_SERVICES;
+    else list = [...new Set([...CORE_SERVICES, ...AVTAL_SERVICES])];
+
+    elSvc.innerHTML = `<option value="ALL">Alla</option>` + list.map(s => `<option value="${s}">${s}</option>`).join("");
+    elSvc.value = "ALL";
+  }
+  setServiceOptions(elGroup.value);
+
+  // ===================== DATA =====================
   let allRows = [];
   let filteredRows = [];
+  let lastPopupLngLat = null;
 
-  function parseCSV(text) {
-    const lines = text.replace(/\r/g, "").split("\n").filter(Boolean);
-    const headers = splitCSVLine(lines[0]).map(h => h.trim());
-    const rows = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = splitCSVLine(lines[i]);
-      const obj = {};
-      headers.forEach((h, idx) => obj[h] = (cols[idx] ?? "").trim());
-      rows.push(obj);
-    }
-    return rows;
-  }
+  const SOURCE_ID = "partners";
+  const LAYER_UNCLUSTERED = "unclustered-points";
+  const LAYER_CLUSTERS = "clusters";
+  const LAYER_CLUSTER_COUNT = "cluster-count";
 
   function splitCSVLine(line) {
     const out = [];
@@ -186,11 +268,39 @@
     return out;
   }
 
-  // Normalisera vertikal så dropdownen "Spolbil" kan matcha data som heter "Spol"
-  function normalizeVertical(v) {
-    const s = String(v || "").trim();
-    if (s === "Spol") return "Spolbil";
-    return s;
+  function parseCSV(text) {
+    const lines = text.replace(/\r/g, "").split("\n").filter(Boolean);
+    const headers = splitCSVLine(lines[0]).map(h => h.trim());
+    const rows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = splitCSVLine(lines[i]);
+      const obj = {};
+      headers.forEach((h, idx) => obj[h] = (cols[idx] ?? "").trim());
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function safeHTML(s) {
+    return String(s || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function phoneLink(phone) {
+    const cleaned = (phone || "").replace(/\s+/g, "");
+    if (!cleaned) return "";
+    return `<a href="tel:${cleaned}">${safeHTML(phone)}</a>`;
+  }
+
+  function hasCoords(r){
+    const lat = Number(String(r.lat || "").replace(",", "."));
+    const lng = Number(String(r.lng || "").replace(",", "."));
+    return Number.isFinite(lat) && Number.isFinite(lng);
   }
 
   function rowsToGeoJSON(rows) {
@@ -205,12 +315,14 @@
         geometry: { type: "Point", coordinates: [lng, lat] },
         properties: {
           name: r.name || "",
-          vertical: normalizeVertical(r.vertical || ""),
+          vertical: normalizeService(r.vertical || ""),
           city: r.city || "",
-          rating: r.rating || "",
-          info: r.info || "",
+          address: r.address || "",
+          service: r.service || "",
           phone: r.phone || "",
-          service: r.service || ""
+          info: r.info || "",
+          rating: r.rating || "",
+          image: r.image || ""
         }
       });
     }
@@ -219,10 +331,7 @@
 
   async function loadCSV() {
     setStatus("Laddar…");
-
-    // Cache-bust som funkar för både lokala filer och URL:er med querystring
     const url = CSV_URL + (CSV_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
-
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error("Kunde inte hämta CSV (" + res.status + ")");
     const text = await res.text();
@@ -230,19 +339,45 @@
     setStatus("OK");
   }
 
+  // ===================== FAVORITES =====================
+  const FAV_KEY = "ipis_partnerkarta_favorites_v1";
+  function favId(r){
+    // Stabilt id: name + vertical + city (räcker i praktiken)
+    const n = (r.name || "").trim();
+    const v = normalizeService(r.vertical || "");
+    const c = (r.city || "").trim();
+    return `${n}||${v}||${c}`.toLowerCase();
+  }
+  function loadFavs(){
+    try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]")); }
+    catch { return new Set(); }
+  }
+  function saveFavs(set){
+    localStorage.setItem(FAV_KEY, JSON.stringify([...set]));
+  }
+  let favs = loadFavs();
+
+  function toggleFav(row){
+    const id = favId(row);
+    if (favs.has(id)) favs.delete(id);
+    else favs.add(id);
+    saveFavs(favs);
+    renderList();
+  }
+
+  // ===================== FILTERING + LIST =====================
   function applyFilters() {
     const q = elSearch.value.trim().toLowerCase();
-    const v = elVertical.value;
-    const s = elService.value;
+    const groupValue = elGroup.value;
+    const selectedSvc = elSvc.value;
 
     filteredRows = allRows.filter(r => {
       const name = (r.name || "").toLowerCase();
       const city = (r.city || "").toLowerCase();
-      const vertical = normalizeVertical(r.vertical || "");
-      const service = (r.service || "");
+      const svc  = normalizeService(r.vertical || "");
 
-      if (v !== "ALL" && vertical !== v) return false;
-      if (s !== "ALL" && service !== s) return false;
+      if (!groupAllows(groupValue, svc)) return false;
+      if (selectedSvc !== "ALL" && svc !== selectedSvc) return false;
 
       if (q) {
         const hit = name.includes(q) || city.includes(q);
@@ -252,29 +387,218 @@
     });
 
     elCount.textContent = String(filteredRows.length);
+    const coordsCount = filteredRows.filter(hasCoords).length;
+    elCoordsInfo.textContent = `${coordsCount} med koordinater`;
 
     const geojson = rowsToGeoJSON(filteredRows);
     if (map.getSource(SOURCE_ID)) {
       map.getSource(SOURCE_ID).setData(geojson);
     }
+
+    renderList();
   }
 
-  function phoneLink(phone) {
-    const cleaned = (phone || "").replace(/\s+/g, "");
-    if (!cleaned) return "";
-    return `<a href="tel:${cleaned}">${phone}</a>`;
+  function rowCoords(row){
+    const lat = Number(String(row.lat || "").replace(",", "."));
+    const lng = Number(String(row.lng || "").replace(",", "."));
+    return [lng, lat];
   }
 
-  function safeHTML(s) {
-    return String(s || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+  function openPopupForRow(row){
+    if (!hasCoords(row)) return;
+
+    const coords = rowCoords(row);
+    lastPopupLngLat = coords;
+
+    const isFav = favs.has(favId(row));
+    const img = row.image ? `<img src="${safeHTML(row.image)}" style="width:100%;max-width:260px;border-radius:12px;margin:8px 0;" />` : "";
+
+    const html = `
+      <div style="min-width:240px">
+        <div style="display:flex;gap:10px;align-items:flex-start;">
+          <div style="font-weight:900;font-size:14px;flex:1;">${safeHTML(row.name)}</div>
+          <button id="favBtn" style="border:1px solid #ddd;background:#fafafa;border-radius:10px;padding:6px 8px;cursor:pointer;">
+            ${isFav ? "⭐ Favorit" : "☆ Favorit"}
+          </button>
+        </div>
+        ${img}
+        <div style="font-size:12px; color:#333; line-height:1.45;">
+          <div><strong>Tjänst:</strong> ${safeHTML(normalizeService(row.vertical))}</div>
+          <div><strong>Stad:</strong> ${safeHTML(row.city || "")}</div>
+          <div><strong>Adress:</strong> ${safeHTML(row.address || "")}</div>
+          <div><strong>Typ:</strong> ${safeHTML(row.service || "")}</div>
+          ${row.rating ? `<div><strong>Betyg:</strong> ${safeHTML(row.rating)}</div>` : ""}
+          ${row.info ? `<div style="margin-top:6px;"><strong>Info:</strong><br>${safeHTML(row.info)}</div>` : ""}
+          ${row.phone ? `<div style="margin-top:8px;"><strong>Telefon:</strong> ${phoneLink(row.phone)}</div>` : ""}
+        </div>
+      </div>
+    `;
+
+    const popup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
+      .setLngLat(coords)
+      .setHTML(html)
+      .addTo(map);
+
+    // Hook favorite button after popup renders
+    setTimeout(() => {
+      const btn = document.getElementById("favBtn");
+      if (btn) btn.onclick = () => { toggleFav(row); popup.remove(); openPopupForRow(row); };
+    }, 0);
+
+    map.flyTo({ center: coords, zoom: Math.max(map.getZoom(), 10), speed: 1.1 });
   }
 
-  // ====== 5) INIT MAP LAYERS ======
+  function renderRowCard(row, extraMeta=""){
+    const isFav = favs.has(favId(row));
+    const meta = `${normalizeService(row.vertical)} • ${row.city || ""}` + (extraMeta ? ` • ${extraMeta}` : "");
+    return `
+      <div class="card" data-id="${encodeURIComponent(favId(row))}">
+        <div style="min-width:0;flex:1;">
+          <div class="card-title">${safeHTML(row.name || "")}</div>
+          <div class="card-meta">${safeHTML(meta)}</div>
+        </div>
+        <div class="star ${isFav ? "on" : ""}" data-star="${encodeURIComponent(favId(row))}">
+          ${isFav ? "⭐" : "☆"}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderList(){
+    // Which tab?
+    const isResults = tabResults.classList.contains("active");
+    const isFav = tabFav.classList.contains("active");
+    const isNear = tabNear.classList.contains("active");
+
+    if (isNear){
+      // list handled by near functions
+      if (!elList.dataset.mode || elList.dataset.mode !== "near") {
+        elList.dataset.mode = "near";
+        elList.innerHTML = `<div class="muted">Välj “Närmast mig” eller skriv en adress och tryck “Sök adress”.</div>`;
+      }
+      return;
+    }
+
+    elList.dataset.mode = isFav ? "fav" : "results";
+
+    let rows = filteredRows.slice();
+
+    if (isFav){
+      rows = rows.filter(r => favs.has(favId(r)));
+    }
+
+    // show only with coords in list by default (för bokare = klickbar)
+    rows = rows.filter(hasCoords);
+
+    // top 20
+    rows = rows.slice(0, 20);
+
+    if (!rows.length){
+      elList.innerHTML = `<div class="muted">Inga träffar (eller saknar lat/lng).</div>`;
+      return;
+    }
+
+    elList.innerHTML = rows.map(r => renderRowCard(r)).join("");
+
+    // card click
+    elList.querySelectorAll(".card").forEach(card => {
+      card.addEventListener("click", (e) => {
+        // star click handled below
+        if (e.target && e.target.closest && e.target.closest(".star")) return;
+        const id = decodeURIComponent(card.dataset.id);
+        const row = filteredRows.find(rr => favId(rr) === id);
+        if (row) openPopupForRow(row);
+      });
+    });
+
+    // star click
+    elList.querySelectorAll(".star").forEach(st => {
+      st.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = decodeURIComponent(st.dataset.star);
+        const row = allRows.find(rr => favId(rr) === id);
+        if (row) toggleFav(row);
+      });
+    });
+  }
+
+  function fitToRows(rows){
+    const geojson = rowsToGeoJSON(rows);
+    const coords = geojson.features.map(f => f.geometry.coordinates);
+    if (!coords.length) return;
+
+    let minX = coords[0][0], minY = coords[0][1], maxX = coords[0][0], maxY = coords[0][1];
+    for (const [x,y] of coords) {
+      minX = Math.min(minX, x); minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    map.fitBounds([[minX, minY], [maxX, maxY]], { padding: 60, maxZoom: 10, duration: 800 });
+  }
+
+  // ===================== NEAREST (ME / ADDRESS) =====================
+  function haversineKm(lat1, lon1, lat2, lon2){
+    const R = 6371;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  function nearestTo(lat, lng){
+    const rows = filteredRows.filter(hasCoords);
+    const scored = rows.map(r => {
+      const [rlng, rlat] = rowCoords(r);
+      const km = haversineKm(lat, lng, rlat, rlng);
+      return { r, km };
+    }).sort((a,b) => a.km - b.km).slice(0, 20);
+
+    elList.dataset.mode = "near";
+    if (!scored.length){
+      elList.innerHTML = `<div class="muted">Inga partners med koordinater i nuvarande filter.</div>`;
+      return;
+    }
+
+    elList.innerHTML = scored.map(x => renderRowCard(x.r, `${x.km.toFixed(1)} km`)).join("");
+
+    elList.querySelectorAll(".card").forEach(card => {
+      card.addEventListener("click", (e) => {
+        if (e.target && e.target.closest && e.target.closest(".star")) return;
+        const id = decodeURIComponent(card.dataset.id);
+        const row = allRows.find(rr => favId(rr) === id);
+        if (row) openPopupForRow(row);
+      });
+    });
+
+    elList.querySelectorAll(".star").forEach(st => {
+      st.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = decodeURIComponent(st.dataset.star);
+        const row = allRows.find(rr => favId(rr) === id);
+        if (row) toggleFav(row);
+      });
+    });
+
+    // fly to search location
+    map.flyTo({ center: [lng, lat], zoom: 10, speed: 1.1 });
+    new mapboxgl.Marker({}).setLngLat([lng, lat]).addTo(map);
+  }
+
+  async function geocodeAddress(q){
+    const url = "https://api.mapbox.com/geocoding/v5/mapbox.places/" +
+      encodeURIComponent(q) +
+      ".json?limit=1&country=se&language=sv&access_token=" + encodeURIComponent(mapboxgl.accessToken);
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Geocoding fel (" + res.status + ")");
+    const json = await res.json();
+    const feat = json && json.features && json.features[0];
+    if (!feat) return null;
+    return { lng: feat.center[0], lat: feat.center[1], label: feat.place_name };
+  }
+
+  // ===================== MAP INIT =====================
   map.on("load", async () => {
     try {
       await loadCSV();
@@ -284,7 +608,7 @@
         data: rowsToGeoJSON(allRows),
         cluster: true,
         clusterMaxZoom: 12,
-        clusterRadius: 50
+        clusterRadius: 55
       });
 
       map.addLayer({
@@ -295,7 +619,7 @@
         paint: {
           "circle-radius": [
             "step", ["get", "point_count"],
-            16,   25, 22,   75, 28,   200, 34
+            18,  25, 24,  75, 30,  200, 36
           ],
           "circle-opacity": 0.85
         }
@@ -306,10 +630,7 @@
         type: "symbol",
         source: SOURCE_ID,
         filter: ["has", "point_count"],
-        layout: {
-          "text-field": ["get", "point_count_abbreviated"],
-          "text-size": 12
-        }
+        layout: { "text-field": ["get", "point_count_abbreviated"], "text-size": 12 }
       });
 
       map.addLayer({
@@ -335,26 +656,16 @@
 
       map.on("click", LAYER_UNCLUSTERED, (e) => {
         const f = e.features[0];
-        const p = f.properties;
-
-        const html = `
-          <div style="min-width:220px">
-            <div style="font-weight:800; font-size:14px; margin-bottom:6px;">${safeHTML(p.name)}</div>
-            <div style="font-size:12px; color:#333; line-height:1.4;">
-              <div><strong>Vertikal:</strong> ${safeHTML(p.vertical)}</div>
-              <div><strong>Stad:</strong> ${safeHTML(p.city)}</div>
-              <div><strong>Typ:</strong> ${safeHTML(p.service)}</div>
-              <div><strong>Betyg:</strong> ${safeHTML(p.rating)}</div>
-              <div style="margin-top:6px;"><strong>Info:</strong><br>${safeHTML(p.info)}</div>
-              <div style="margin-top:8px;"><strong>Telefon:</strong> ${phoneLink(p.phone)}</div>
-            </div>
-          </div>
-        `;
-
-        new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
-          .setLngLat(f.geometry.coordinates)
-          .setHTML(html)
-          .addTo(map);
+        // hitta originalrad baserat på name+vertical+city
+        const name = f.properties.name || "";
+        const vertical = f.properties.vertical || "";
+        const city = f.properties.city || "";
+        const row = allRows.find(r =>
+          (r.name || "").trim() === name &&
+          normalizeService(r.vertical || "") === vertical &&
+          (r.city || "").trim() === city
+        );
+        if (row) openPopupForRow(row);
       });
 
       map.on("mouseenter", LAYER_UNCLUSTERED, () => map.getCanvas().style.cursor = "pointer");
@@ -362,31 +673,46 @@
       map.on("mouseenter", LAYER_CLUSTERS, () => map.getCanvas().style.cursor = "pointer");
       map.on("mouseleave", LAYER_CLUSTERS, () => map.getCanvas().style.cursor = "");
 
+      // init + fit so it feels "loaded"
       applyFilters();
+      fitToRows(allRows);
       setStatus("Live");
+
     } catch (err) {
       console.error(err);
       setStatus("Fel");
-      alert("Något gick fel när CSV laddades. Öppna DevTools Console för detaljer.\n\n" + err.message);
+      alert("Något gick fel när CSV laddades.\n\n" + err.message);
     }
   });
 
-  // ====== 6) UI EVENTS ======
+  // ===================== EVENTS =====================
   const debounced = (fn, ms=150) => {
     let t;
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   };
 
   elSearch.addEventListener("input", debounced(applyFilters, 150));
-  elVertical.addEventListener("change", applyFilters);
-  elService.addEventListener("change", applyFilters);
+
+  elGroup.addEventListener("change", () => {
+    setServiceOptions(elGroup.value);
+    applyFilters();
+  });
+
+  elSvc.addEventListener("change", applyFilters);
 
   $("reset").addEventListener("click", () => {
     elSearch.value = "";
-    elVertical.value = "ALL";
-    elService.value = "ALL";
+    elGroup.value = "ALL";
+    setServiceOptions("ALL");
     applyFilters();
+    setActiveTab("results");
   });
+
+  $("centerSE").addEventListener("click", () => {
+    map.flyTo({ center: [15.0, 62.0], zoom: 4.2, speed: 1.2 });
+  });
+
+  $("zoomTo").addEventListener("click", () => fitToRows(filteredRows));
 
   $("reload").addEventListener("click", async () => {
     try {
@@ -398,6 +724,43 @@
       console.error(e);
       setStatus("Fel");
       alert("Kunde inte uppdatera data.\n\n" + e.message);
+    }
+  });
+
+  $("nearMe").addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation stöds inte i denna browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setActiveTab("near");
+        nearestTo(pos.coords.latitude, pos.coords.longitude);
+      },
+      (err) => {
+        alert("Kunde inte hämta position.\n\n" + err.message);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  });
+
+  $("nearSearch").addEventListener("click", async () => {
+    const q = nearAddr.value.trim();
+    if (!q) return alert("Skriv en adress först.");
+    try {
+      setActiveTab("near");
+      setStatus("Söker adress…");
+      const res = await geocodeAddress(q);
+      if (!res) {
+        setStatus("Live");
+        return alert("Hittade ingen matchning på adressen.");
+      }
+      setStatus("Live");
+      nearestTo(res.lat, res.lng);
+    } catch (e) {
+      console.error(e);
+      setStatus("Fel");
+      alert("Adress-sök fel.\n\n" + e.message);
     }
   });
 </script>
